@@ -59,6 +59,13 @@ def telegram_webhook():
 
     return {"ok": True}
 
+# ✅ Optional fallback route to help debugging
+@app.route("/fallback", methods=["POST"])
+def fallback_webhook():
+    data = request.get_json()
+    print("Fallback update on `/fallback`: ", data)
+    return "OK"
+
 def handle_message(chat_id, message, user_states):
     if "text" in message:
         text = message.get("text", "")
