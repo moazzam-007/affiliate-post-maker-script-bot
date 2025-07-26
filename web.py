@@ -1,4 +1,3 @@
-# web.py
 import os
 import re
 from flask import Flask, request
@@ -36,6 +35,10 @@ def telegram_webhook():
     message = data.get("message", {})
     chat_id = message.get("chat", {}).get("id")
 
+    if not chat_id:
+        return {"ok": True}
+
+    # Handle photo upload
     if "photo" in message:
         if chat_id not in user_states or user_states[chat_id].get("stage") != "ready":
             send_telegram(chat_id, "❗ Please start with /start and follow the steps.")
@@ -65,7 +68,7 @@ def telegram_webhook():
         os.remove(output_path)
         return {"ok": True}
 
-    # text command handling
+    # Handle text commands
     text = message.get("text", "")
     if text.startswith("/start"):
         templates = list_templates()
@@ -87,7 +90,7 @@ def telegram_webhook():
                 send_telegram(chat_id, "📏 Now enter max product height (e.g. 1200):")
             else:
                 send_telegram(chat_id, "❌ Invalid choice. Try again.")
-        except:
+        except ValueError:
             send_telegram(chat_id, "❌ Please enter a valid number.")
 
     elif chat_id in user_states and user_states[chat_id]["stage"] == "awaiting_height":
@@ -96,7 +99,7 @@ def telegram_webhook():
             user_states[chat_id]["max_height"] = height
             user_states[chat_id]["stage"] = "ready"
             send_telegram(chat_id, "✅ Great! Now send product image(s).")
-        except:
+        except ValueError:
             send_telegram(chat_id, "❌ Invalid height. Enter a number like 1200.")
 
     else:
@@ -107,11 +110,6 @@ def telegram_webhook():
 def home():
     return "✅ Affiliate Template Bot Running"
 
-# 🔥 THIS PART IS IMPORTANT for Renderimport os  # Make sure this is imported
-
-import os  # Make sure this is imported
-
+# ✅ PORT binding for Render.com
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-
+    app.run(host="0.0.0.0", port=PORT)
