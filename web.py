@@ -107,6 +107,11 @@ def telegram_webhook():
 def home():
     return "✅ Affiliate Template Bot Running"
 
-# 🔥 THIS PART IS IMPORTANT for Render
+# 🔥 THIS PART IS IMPORTANT for Renderimport os  # Make sure this is imported
+
+import os  # Make sure this is imported
+
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=PORT)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+
