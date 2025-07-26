@@ -4,27 +4,31 @@ import re
 from flask import Flask, request
 import requests
 from process import process_images, list_templates
-
 from werkzeug.utils import secure_filename
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-app = Flask(__name__)
+PORT = int(os.environ.get("PORT", 5000))
 
-user_states = {}  # to track template choice and max height per user
+app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Send message
+user_states = {}
+
 def send_telegram(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     requests.post(url, data=payload)
 
-# Send photo
 def send_photo(chat_id, image_path):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
     with open(image_path, "rb") as img:
         requests.post(url, data={"chat_id": chat_id}, files={"photo": img})
+
+def get_file_path(file_id):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
+    resp = requests.get(url).json()
+    return resp["result"]["file_path"]
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
@@ -32,43 +36,37 @@ def telegram_webhook():
     message = data.get("message", {})
     chat_id = message.get("chat", {}).get("id")
 
-    # File/image handling
     if "photo" in message:
-        if chat_id not in user_states:
-            send_telegram(chat_id, "❗ Please start with /start")
+        if chat_id not in user_states or user_states[chat_id].get("stage") != "ready":
+            send_telegram(chat_id, "❗ Please start with /start and follow the steps.")
             return {"ok": True}
 
-        # Ask for max height if not given
         if "max_height" not in user_states[chat_id]:
-            send_telegram(chat_id, "📏 Enter max height first (e.g. 1200)")
+            send_telegram(chat_id, "📏 Please provide max height first.")
             return {"ok": True}
 
-        # Get highest resolution photo
         photo_list = message["photo"]
         file_id = photo_list[-1]["file_id"]
         file_path = get_file_path(file_id)
         file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-
-        # Download
         local_filename = os.path.join(UPLOAD_FOLDER, secure_filename(file_id + ".jpg"))
+
         with open(local_filename, "wb") as f:
             f.write(requests.get(file_url).content)
 
-        # Process image
         output_path = process_images(
             [local_filename],
             user_states[chat_id]["template"],
             user_states[chat_id]["max_height"]
-        )[0]  # one image only
+        )[0]
 
         send_photo(chat_id, output_path)
         os.remove(local_filename)
         os.remove(output_path)
         return {"ok": True}
 
-    # Handle text
+    # text command handling
     text = message.get("text", "")
-
     if text.startswith("/start"):
         templates = list_templates()
         msg = "🖼 Choose a template by replying with its number:\n"
@@ -77,7 +75,7 @@ def telegram_webhook():
         user_states[chat_id] = {"stage": "awaiting_template"}
         send_telegram(chat_id, msg)
 
-    elif chat_id in user_states and user_states[chat_id].get("stage") == "awaiting_template":
+    elif chat_id in user_states and user_states[chat_id]["stage"] == "awaiting_template":
         templates = list_templates()
         try:
             choice = int(text.strip())
@@ -92,27 +90,23 @@ def telegram_webhook():
         except:
             send_telegram(chat_id, "❌ Please enter a valid number.")
 
-    elif chat_id in user_states and user_states[chat_id].get("stage") == "awaiting_height":
+    elif chat_id in user_states and user_states[chat_id]["stage"] == "awaiting_height":
         try:
             height = int(text.strip())
             user_states[chat_id]["max_height"] = height
             user_states[chat_id]["stage"] = "ready"
-            send_telegram(chat_id, "✅ Great! Now send product image(s). I will remove BG and paste on your template.")
+            send_telegram(chat_id, "✅ Great! Now send product image(s).")
         except:
-            send_telegram(chat_id, "❌ Invalid height. Enter a number like 1200")
+            send_telegram(chat_id, "❌ Invalid height. Enter a number like 1200.")
 
     else:
         send_telegram(chat_id, "❓ I didn’t understand. Please use /start to begin.")
-
     return {"ok": True}
 
 @app.route("/")
 def home():
     return "✅ Affiliate Template Bot Running"
 
-def get_file_path(file_id):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
-    return requests.get(url).json()["result"]["file_path"]
-
+# 🔥 THIS PART IS IMPORTANT for Render
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=True, host="0.0.0.0", port=PORT)
