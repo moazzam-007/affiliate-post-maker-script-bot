@@ -5,15 +5,16 @@ import requests
 from process import process_images, list_templates
 from werkzeug.utils import secure_filename
 
+# Environment config
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-PORT = int(os.environ.get("PORT", 5000))
-
-app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Flask app init
+app = Flask(__name__)
 user_states = {}
 
+# Telegram helpers
 def send_telegram(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
@@ -29,6 +30,7 @@ def get_file_path(file_id):
     resp = requests.get(url).json()
     return resp["result"]["file_path"]
 
+# Main webhook
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
     data = request.json
@@ -38,7 +40,6 @@ def telegram_webhook():
     if not chat_id:
         return {"ok": True}
 
-    # Handle photo upload
     if "photo" in message:
         if chat_id not in user_states or user_states[chat_id].get("stage") != "ready":
             send_telegram(chat_id, "❗ Please start with /start and follow the steps.")
@@ -68,7 +69,7 @@ def telegram_webhook():
         os.remove(output_path)
         return {"ok": True}
 
-    # Handle text commands
+    # Text command handling
     text = message.get("text", "")
     if text.startswith("/start"):
         templates = list_templates()
@@ -104,12 +105,15 @@ def telegram_webhook():
 
     else:
         send_telegram(chat_id, "❓ I didn’t understand. Please use /start to begin.")
+
     return {"ok": True}
 
+# Health check route
 @app.route("/")
 def home():
     return "✅ Affiliate Template Bot Running"
 
-# ✅ PORT binding for Render.com
+# 🟢 Flask app port binding (for local dev only, NOT needed for gunicorn)
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
