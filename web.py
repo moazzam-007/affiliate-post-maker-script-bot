@@ -42,27 +42,23 @@ def get_file_path(file_id):
         print(f"[get_file_path] Error: {e}")
         return None
 
-# --- Main Route (Simplified) ---
-# ######################################################################
-# SABSE BADA BADLAV YAHAN HAI.
-# Ab yeh ek hi function GET aur POST dono requests ko main URL par handle karega.
-# ######################################################################
-@app.route("/", methods=["GET", "POST"])
-def webhook():
-    # Agar Telegram se message aaya hai (POST request)
-    if request.method == "POST":
-        data = request.json
-        chat_id = data.get("message", {}).get("chat", {}).get("id")
-        if not chat_id:
-            return {"ok": True}
-        
-        with shelve.open("user_states.db") as user_states:
-            handle_message(chat_id, data.get("message", {}), user_states)
-        
+# --- Root route for browser testing ---
+@app.route("/", methods=["GET"])
+def root():
+    return "✅ Affiliate Template Bot Running"
+
+# --- Webhook route for Telegram updates ---
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def telegram_webhook():
+    data = request.json
+    chat_id = data.get("message", {}).get("chat", {}).get("id")
+    if not chat_id:
         return {"ok": True}
     
-    # Agar browser me khola hai (GET request)
-    return "✅ Affiliate Template Bot Running"
+    with shelve.open("user_states.db") as user_states:
+        handle_message(chat_id, data.get("message", {}), user_states)
+
+    return {"ok": True}
 
 # --- Message Handling Logic ---
 def handle_message(chat_id, message, user_states):
@@ -82,7 +78,7 @@ def handle_message(chat_id, message, user_states):
             try:
                 choice = int(text.strip())
                 if 1 <= choice <= len(templates):
-                    current_state["template"] = templates[choice - 1] # Minimal fix applied
+                    current_state["template"] = templates[choice - 1]
                     current_state["stage"] = "awaiting_height"
                     user_states[str(chat_id)] = current_state
                     send_telegram(chat_id, "📏 Ab product ki max height enter karein (e.g., 1200):")
@@ -140,6 +136,7 @@ def handle_message(chat_id, message, user_states):
             if output_path and os.path.exists(output_path):
                 os.remove(output_path)
 
+# --- App start ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"✅ Starting Flask app on port {port}")
