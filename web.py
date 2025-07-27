@@ -7,27 +7,20 @@ import requests
 from werkzeug.utils import secure_filename
 from process import process_images, list_templates
 
-# Load bot token
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN env variable not found")
 
-print(f"✅ BOT_TOKEN loaded: {BOT_TOKEN}")
-
-# Flask setup
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# User session memory
 user_states = {}
 
-# Telegram message sender
 def send_telegram(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": text})
 
-# Handle image + commands
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = request.get_json()
@@ -41,16 +34,15 @@ def webhook():
     chat_id = message["chat"]["id"]
     user_id = message["from"]["id"]
 
-    # Start or reset
     if "text" in message:
         text = message["text"]
 
         if text == "/start":
-            send_telegram(chat_id, "👋 Welcome! Please send an image to begin.")
+            send_telegram(chat_id, "👋 Welcome! Send an image to start.")
             user_states[user_id] = {}
         elif text.startswith("/template"):
             templates = list_templates()
-            send_telegram(chat_id, f"🖼 Available templates:\n" + "\n".join(templates))
+            send_telegram(chat_id, "🖼 Available templates:\n" + "\n".join(templates))
         elif re.match(r"/set (\d+)", text):
             height = int(text.split()[1])
             user_states[user_id]["max_height"] = height
@@ -63,7 +55,6 @@ def webhook():
             send_telegram(chat_id, "❓ Unknown command.")
         return {"ok": True}
 
-    # If photo is sent
     if "photo" in message:
         file_id = message["photo"][-1]["file_id"]
         file_info = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}").json()
@@ -81,19 +72,19 @@ def webhook():
         max_height = user_prefs.get("max_height")
 
         try:
-            output_path = process_images(local_path, template=template, max_height=max_height)
-            files = {"photo": open(output_path, "rb")}
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", data={"chat_id": chat_id}, files=files)
+            output_paths = process_images([local_path], template, max_height)  # 🔁 Pass as list
+            for output_path in output_paths:
+                with open(output_path, "rb") as f:
+                    files = {"photo": f}
+                    requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", data={"chat_id": chat_id}, files=files)
         except Exception as e:
             send_telegram(chat_id, f"❌ Error: {str(e)}")
 
     return {"ok": True}
 
-# Health check
 @app.route("/")
 def home():
     return "✅ Bot is alive."
 
-# Flask run (used locally only)
-if __name__ == "__main__":
-    app.run(debug=True)
+# Vercel expects `app` object to be present
+app = app
