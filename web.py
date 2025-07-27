@@ -27,7 +27,6 @@ UPLOAD_FOLDER.mkdir(exist_ok=True) # Folder banayein agar मौजूद nahi h
 app = Flask(__name__)
 
 # User states ko store karne ke liye ek simple dictionary
-# Yeh bot restart hone par reset ho jayegi, jo Render ke liye theek hai
 user_states = {}
 
 # --- Telegram Helper Functions ---
@@ -74,25 +73,29 @@ def get_file_path(file_id: str) -> str | None:
 
 # --- Flask Routes ---
 
-@app.route("/", methods=["GET"])
-def home():
-    return "✅ Affiliate Template Bot Running"
-
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+# ##################################################################
+# Galti yahan theek ki gayi hai.
+# Ab yeh ek hi function GET aur POST dono requests handle karega.
+# ##################################################################
+@app.route(f"/{BOT_TOKEN}", methods=["GET", "POST"])
 def telegram_webhook():
-    """Main webhook jo Telegram se updates leta hai."""
-    data = request.json
-    if not data or "message" not in data:
-        return {"ok": False, "error": "Invalid request"}
+    """Main webhook jo Telegram se updates leta hai aur status check ke liye bhi hai."""
+    if request.method == "POST":
+        data = request.json
+        if not data or "message" not in data:
+            return {"ok": False, "error": "Invalid request"}
 
-    message = data["message"]
-    chat_id = message.get("chat", {}).get("id")
+        message = data["message"]
+        chat_id = message.get("chat", {}).get("id")
 
-    if not chat_id:
-        return {"ok": True} # Agar chat_id nahi to ignore karein
+        if not chat_id:
+            return {"ok": True}
 
-    handle_message(chat_id, message)
-    return {"ok": True}
+        handle_message(chat_id, message)
+        return {"ok": True}
+    
+    # Agar GET request hai to status dikhayein
+    return "✅ Affiliate Template Bot Running"
 
 # --- Message Handling Logic ---
 
@@ -129,7 +132,6 @@ def handle_text_message(chat_id: int, text: str, current_state: dict):
             choice = int(text.strip())
             templates = list_templates()
             if 1 <= choice <= len(templates):
-                # Galti yahan theek ki gayi: Sirf filename save karein
                 current_state["template"] = templates[choice - 1]
                 current_state["stage"] = "awaiting_height"
                 user_states[str(chat_id)] = current_state
@@ -161,7 +163,6 @@ def handle_photo_message(chat_id: int, photo_data: list, current_state: dict):
         send_telegram(chat_id, "❗ Pehle /start command se setup poora karein.")
         return
 
-    # Sabse high-quality photo lein
     file_id = photo_data[-1]["file_id"]
     file_rel_path = get_file_path(file_id)
     if not file_rel_path:
@@ -170,18 +171,15 @@ def handle_photo_message(chat_id: int, photo_data: list, current_state: dict):
 
     file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_rel_path}"
     
-    # Secure filename istemal karein
     local_filename = UPLOAD_FOLDER / secure_filename(file_id + ".jpg")
     output_path = None
 
     try:
-        # Image download karein
         response = requests.get(file_url)
         response.raise_for_status()
         with open(local_filename, "wb") as f:
             f.write(response.content)
 
-        # Image process karein
         output_paths = process_images(
             [local_filename],
             current_state["template"],
@@ -198,7 +196,6 @@ def handle_photo_message(chat_id: int, photo_data: list, current_state: dict):
         logger.error(f"[handle_photo_message] Error processing image: {e}")
         send_telegram(chat_id, "⚙️ Image process karte waqt error aaya. Please check logs.")
     finally:
-        # Temporary files ko saaf karein
         if local_filename.exists():
             os.remove(local_filename)
         if output_path and output_path.exists():
@@ -208,5 +205,4 @@ def handle_photo_message(chat_id: int, photo_data: list, current_state: dict):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     logger.info(f"✅ Starting Flask app on port {port}")
-    # debug=False production ke liye behtar hai
     app.run(host="0.0.0.0", port=port, debug=False)
