@@ -1,3 +1,5 @@
+# process.py
+
 from PIL import Image
 from rembg import remove
 from io import BytesIO
@@ -26,27 +28,17 @@ def process_images(product_paths, template_name, max_height):
         W, H = template.size
 
         for product_path in product_paths:
-            
-            # ############## YAHAN Galti Theek Ki Gayi Hai ##############
-            # Bhaari process se pehle image ko resize karein taaki memory bache
-            
             with open(product_path, "rb") as f:
                 img_data = f.read()
 
             product_img_for_resize = Image.open(BytesIO(img_data))
-            
-            # Image ko ek max size (e.g., 1200x1200) me fit karein
             product_img_for_resize.thumbnail((1200, 1200), Image.LANCZOS)
-            
-            # Resized image ko bytes me convert karein
+
             resized_img_bytes = BytesIO()
             product_img_for_resize.save(resized_img_bytes, format='PNG')
             resized_img_bytes.seek(0)
-            
-            # Ab resized image ka background remove karein
-            product_bytes = remove(resized_img_bytes.read())
-            # ###########################################################
 
+            product_bytes = remove(resized_img_bytes.read())
             product_img = Image.open(BytesIO(product_bytes)).convert("RGBA")
 
             bbox = product_img.getbbox()
@@ -55,7 +47,7 @@ def process_images(product_paths, template_name, max_height):
 
             w, h = product_img.size
             if h == 0: continue
-            
+
             scale = max_height / h
             new_width = int(w * scale)
             product_img = product_img.resize((new_width, max_height), Image.LANCZOS)
